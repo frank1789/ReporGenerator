@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-KNOW_FOLDER = ["app", "script", "package", "autobuild", "conf.d", "bazel-bin", "bazel-out", "bazel-testlogs", "tests", "bazel-speech", "binding", "app_test", "thirdparty", "build", "asset", "readme-asset", "assets"]
+KNOW_FOLDER = ["app", "apps","script", "package", "autobuild", "conf.d", "bazel-bin", "bazel-out", "bazel-testlogs", "tests", "bazel-speech", "binding", "app_test", "thirdparty", "build", "asset", "readme-asset", "assets",  "libs", "can_samples", "docs", "test_can_h", "plugin", "plugins", "examples", "low-level-can-generator", "include"]
 STRUCTURE_SERVICE = ["autobuild", "conf.d", "binding"]
 STRUCTURE_APP = ["autobuild", "conf.d", "app"]
 
@@ -30,7 +30,9 @@ class Project
   def get_project
     result = []
     for name in @name_
-      result << { name: name, branch: @branch_, commit: @commit_, tag: @tag_ }
+      if !@branch_.nil?
+        result << { name: name, branch: @branch_, commit: @commit_, tag: @tag_ }
+      end
     end
     return result
   end
@@ -48,7 +50,7 @@ class Project
       return branch
     when "master"
       return branch
-    when "develop"
+    when /develop/
       return branch
     when /feature\/.*/
       return branch
@@ -59,7 +61,7 @@ class Project
     when /experiment.*/
       return branch
     else
-      raise "Not found a valid branch name"
+      return nil
     end
   end
 
@@ -70,15 +72,16 @@ class Project
     elsif check_structure_dir(name)
       out << name.split("/").last
     else
-      subfolders = Dir.glob([name + "/**"])
+      subfolders = Dir.glob(["*"])
       filter_know_subfolder(@size, subfolders) { |i, res| @size = i; out << res }
       out
     end
   end
 
   def check_structure_dir(directory)
+    puts "==> check structure directory: #{directory}"
     valid = false
-    subfolders = Dir.glob([directory + "/**"])
+    subfolders = Dir.glob([File.join(directory, "*")])
     for subproject in subfolders
       if STRUCTURE_SERVICE.include?(subproject.split("/").last) || STRUCTURE_APP.include?(subproject.split("/").last)
         valid = true
@@ -100,9 +103,9 @@ class ProjectRevision
   end
 
   def scan_folders()
-    folders = Dir.glob([@projects_directory_ + "/**"])
+    folders = Dir.glob([File.join(@projects_directory_, "*")])
     for folder in folders
-      if File.directory?(folder + "/.git")
+      if File.directory?(folder)
         puts "==> found valid git project: #{folder}"
         @repository_projects_ << folder
       end
@@ -122,10 +125,10 @@ class ProjectRevision
     filename = File.join(Dir.pwd, filename)
     puts "==> register file: #{filename}"
     File.open(filename, "w+") { |f|
-      f.write "# Kinecar image built #{@timestamp}\n"
-      f.write "This file contains\n"
+      f.write "# Kinecar image built #{@timestamp}\n\n"
+      f.write "## kinecar-platform v#{"0.1.0"}\n"
 
-      f.write "\n\n"
+      f.write "\n"
       f.write "|  Application | base version | branch | commit |\n"
       f.write "|:-------------|:------------:|:------:|:-------|\n"
       @valid_projects_.each { |line|
@@ -141,11 +144,16 @@ class ProjectRevision
     @repository_projects_.each { |d|
       Dir.chdir(d) {
         # reset the folder extract informatio
-        %x[git stash; git clean -fxd; git checkout develop 2> /dev/null]
+        if !d.match(/\w+\/(homescreen)/)
+          %x[git stash; git clean -fxd; git checkout develop 2> /dev/null]
+        else
+          %x[git stash; git clean -fxd 2> /dev/null]
+        end
         commit = %x[git rev-parse HEAD 2> /dev/null]
         branch = %x[git rev-parse --abbrev-ref HEAD 2> /dev/null]
         tag = %x[git describe --tags --abbrev=0 2> /dev/null]
-        project = Project.new(d.strip, branch.strip, commit.strip, tag.strip)
+        puts "==> #{d} #{tag.strip} #{branch.strip} #{commit.strip}" 
+        project = Project.new(d, branch.strip, commit.strip, tag.strip)
         if !project.nil?
           if project.get_project.kind_of?(Array)
             project.get_project.each { |element| @valid_projects_ << element }
@@ -157,6 +165,34 @@ class ProjectRevision
     }
   end
 end
+
+
+# require 'json'
+# tempHash = {
+#     "key_a" => "val_a",
+#     "key_b" => "val_b"
+# }
+# File.open("public/temp.json","w") do |f|
+#   f.write(JSON.pretty_generate(tempHash))
+# end
+
+
+
+# class Configuration
+  
+#   def initialize
+#     @date
+#     @version
+#   end
+
+
+#   def register_file_on_disk
+#     File.open("public/temp.json","w") do |f|
+#       f.write(JSON.pretty_generate(tempHash))
+#     end
+#   end
+
+# end
 
 if __FILE__ == $0
   puts "==> Generate report current build for Kinecar"
